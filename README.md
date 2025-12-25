@@ -2,6 +2,20 @@
 
 A lightweight, high-performance actor framework for building concurrent systems in Rust.
 
+## Overview
+
+This is part of a **multi-language actor framework** spanning C++, Rust, and Python. All three implementations share a common JSON-over-ZMQ wire protocol, enabling seamless cross-language communication while leveraging each language's unique strengths.
+
+The Rust implementation brings memory safety guarantees while maintaining excellent performance. It's ideal for systems where reliability is paramount but you can't sacrifice too much speed.
+
+**When to use Rust**: Network services, systems programming, anywhere you need C++-like performance with memory safety guarantees, or when building infrastructure that must never crash.
+
+For the full project documentation and blog post, see: https://m2te.ch/blog/opensource/actor-model
+
+**Related repositories:**
+- [actors-cpp](https://github.com/anthropics/actors-cpp) - C++ implementation (lowest latency)
+- [actors-py](https://github.com/anthropics/actors-py) - Python implementation (rapid prototyping)
+
 ## Features
 
 - **Actor Model**: Independent entities processing messages sequentially
@@ -16,7 +30,7 @@ A lightweight, high-performance actor framework for building concurrent systems 
 ### 1. Define Messages
 
 ```rust
-use actors::{Message, define_message};
+use actors::{Message, define_message, Start};
 
 struct Ping { count: i32 }
 define_message!(Ping);
@@ -28,16 +42,46 @@ define_message!(Pong);
 ### 2. Create Actors
 
 ```rust
-use actors::{Actor, ActorContext, Message};
+use actors::{Actor, ActorContext, ActorRef, handle_messages};
 
 struct PongActor;
 
-impl Actor for PongActor {
-    fn process_message(&mut self, msg: &dyn Message, ctx: &mut ActorContext) {
-        if let Some(ping) = msg.as_any().downcast_ref::<Ping>() {
-            println!("Received ping {}", ping.count);
-            ctx.reply(Box::new(Pong { count: ping.count }));
-        }
+impl Actor for PongActor {}
+
+handle_messages!(PongActor,
+    Ping => on_ping
+);
+
+impl PongActor {
+    fn on_ping(&mut self, msg: &Ping, ctx: &mut ActorContext) {
+        println!("Received ping {}", msg.count);
+        ctx.reply(Box::new(Pong { count: msg.count }));
+    }
+}
+
+struct PingActor {
+    pong_ref: ActorRef,
+}
+
+impl Actor for PingActor {}
+
+handle_messages!(PingActor,
+    Start => on_start,
+    Pong => on_pong
+);
+
+impl PingActor {
+    fn new(pong_ref: ActorRef) -> Self {
+        Self { pong_ref }
+    }
+
+    fn on_start(&mut self, _msg: &Start, ctx: &mut ActorContext) {
+        self.pong_ref.send(Box::new(Ping { count: 1 }), ctx.self_ref());
+    }
+
+    fn on_pong(&mut self, msg: &Pong, ctx: &mut ActorContext) {
+        println!("Received pong {}", msg.count);
+        self.pong_ref.send(Box::new(Ping { count: msg.count + 1 }), ctx.self_ref());
     }
 }
 ```
