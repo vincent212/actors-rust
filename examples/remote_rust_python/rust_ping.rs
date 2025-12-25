@@ -27,17 +27,16 @@ use actors::{
 struct Ping {
     count: i32,
 }
-define_message!(Ping, 100);
+define_message!(Ping);
 
 #[derive(Serialize, Deserialize, Default)]
 struct Pong {
     count: i32,
 }
-define_message!(Pong, 101);
+define_message!(Pong);
 
 fn register_messages() {
     // Register messages with their type names (must match Python)
-    // This also registers the ID->name mapping automatically
     register_remote_message::<Ping>("Ping");
     register_remote_message::<Pong>("Pong");
 }

@@ -184,23 +184,20 @@ use actors::{Message, define_message};
 struct Ping {
     count: i32,
 }
-define_message!(Ping, 100);  // ID must be unique (0-511 for fast dispatch)
+define_message!(Ping);
 
 struct Pong {
     count: i32,
 }
-define_message!(Pong, 101);
+define_message!(Pong);
 ```
 
-Message IDs 0-511 get optimized dispatch via a lookup table.
-Higher IDs fall back to HashMap lookup.
-
 Built-in messages:
-- `Start` (ID 0) - Sent when actor starts
-- `Shutdown` (ID 1) - Sent when shutting down
-- `Timeout` (ID 2) - Sent by Timer
-- `Continue` (ID 3) - For self-continuation
-- `Reject` (ID 4) - Sent when remote message delivery fails (see Remote Error Handling)
+- `Start` - Sent when actor starts
+- `Shutdown` - Sent when shutting down
+- `Timeout` - Sent by Timer
+- `Continue` - For self-continuation
+- `Reject` - Sent when remote message delivery fails (see Remote Error Handling)
 
 ## Actor Definition
 
@@ -212,10 +209,10 @@ The `handle_messages!` macro provides type-safe message dispatch:
 use actors::{Actor, ActorContext, define_message, handle_messages, Start};
 
 struct Ping { count: i32 }
-define_message!(Ping, 100);
+define_message!(Ping);
 
 struct Pong { count: i32 }
-define_message!(Pong, 101);
+define_message!(Pong);
 
 struct MyActor {
     state: i32,
@@ -510,9 +507,8 @@ Used in Group for per-actor locks.
 1. **Keep actors lightweight** - Heavy computation blocks the message queue
 2. **Use Groups for many small actors** - Reduces thread overhead
 3. **Prefer send() over fast_send()** - Async is more scalable
-4. **Use message IDs 0-511** - Faster dispatch
-5. **Handle Shutdown gracefully** - Clean up resources in end()
-6. **Use Timer for periodic work** - Don't block in actors
+4. **Handle Shutdown gracefully** - Clean up resources in end()
+5. **Use Timer for periodic work** - Don't block in actors
 
 ## Error Handling
 
@@ -546,11 +542,10 @@ When sending messages to remote actors (via ZMQ), delivery can fail if:
 In these cases, the receiver automatically sends a `Reject` message back:
 
 ```rust
-use actors::{Reject, handle_messages, register_remote_message, register_message_id};
+use actors::{Reject, handle_messages, register_remote_message};
 
 // Register Reject for remote communication
 register_remote_message::<Reject>("Reject");
-register_message_id(4, "Reject");
 
 struct MyActor { /* ... */ }
 

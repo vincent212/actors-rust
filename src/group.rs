@@ -297,7 +297,7 @@ mod tests {
     struct TestMessage {
         value: i32,
     }
-    define_message!(TestMessage, 50);
+    define_message!(TestMessage);
 
     struct CountingActor {
         count: Arc<AtomicI32>,

@@ -28,18 +28,17 @@ use actors::{
 struct Ping {
     count: i32,
 }
-define_message!(Ping, 100);
+define_message!(Ping);
 
 #[derive(Serialize, Deserialize, Default)]
 struct Pong {
     count: i32,
 }
-define_message!(Pong, 101);
+define_message!(Pong);
 
 fn register_messages() {
     // Only register messages we know about
     // Note: UnknownMessage is NOT registered here!
-    // ID->name mapping is now done automatically
     register_remote_message::<Ping>("Ping");
     register_remote_message::<Pong>("Pong");
     register_remote_message::<Reject>("Reject");

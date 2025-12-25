@@ -16,6 +16,7 @@ http://m2te.ch/
 //! Provides a registry for serializing/deserializing messages to JSON
 //! for transmission over ZMQ.
 
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -40,8 +41,8 @@ struct RegistryEntry {
 /// Global message registry (type name -> entry)
 static REGISTRY: Mutex<Option<HashMap<String, RegistryEntry>>> = Mutex::new(None);
 
-/// Reverse registry (message ID -> type name)
-static ID_TO_NAME: Mutex<Option<HashMap<u16, String>>> = Mutex::new(None);
+/// TypeId to type name mapping for runtime lookup
+static TYPEID_TO_NAME: Mutex<Option<HashMap<TypeId, String>>> = Mutex::new(None);
 
 /// Register a message type for remote serialization.
 ///
@@ -52,25 +53,22 @@ static ID_TO_NAME: Mutex<Option<HashMap<u16, String>>> = Mutex::new(None);
 /// use serde::{Serialize, Deserialize};
 /// use actors::{define_message, register_remote_message};
 ///
-/// #[derive(Serialize, Deserialize)]
+/// #[derive(Serialize, Deserialize, Default)]
 /// struct Ping { count: i32 }
-/// define_message!(Ping, 100);
+/// define_message!(Ping);
 ///
 /// // Register for remote communication
 /// register_remote_message::<Ping>("Ping");
 /// ```
 pub fn register_remote_message<M>(type_name: &str)
 where
-    M: Message + Serialize + DeserializeOwned + Default + 'static,
+    M: Message + Serialize + DeserializeOwned + 'static,
 {
-    // Get the message ID by creating a default instance
-    let msg_id = M::default().message_id();
-
-    // Register ID -> name mapping upfront
+    // Register TypeId -> name mapping for runtime lookup
     {
-        let mut id_map = ID_TO_NAME.lock().unwrap();
-        let map = id_map.get_or_insert_with(HashMap::new);
-        map.insert(msg_id, type_name.to_string());
+        let mut typeid_map = TYPEID_TO_NAME.lock().unwrap();
+        let map = typeid_map.get_or_insert_with(HashMap::new);
+        map.insert(TypeId::of::<M>(), type_name.to_string());
     }
 
     let mut reg = REGISTRY.lock().unwrap();
@@ -93,6 +91,18 @@ where
             deserialize,
         },
     );
+}
+
+/// Get the registered type name for a message by its TypeId.
+/// Returns None if the type hasn't been registered.
+pub fn get_type_name(msg: &dyn Message) -> Option<String> {
+    let type_id = msg.as_any().type_id();
+    let typeid_map = TYPEID_TO_NAME.lock().unwrap();
+    if let Some(map) = typeid_map.as_ref() {
+        map.get(&type_id).cloned()
+    } else {
+        None
+    }
 }
 
 /// Serialize a message to JSON using the registry.
@@ -149,70 +159,18 @@ pub fn is_message_registered(type_name: &str) -> bool {
     }
 }
 
-/// Get the registered type name for a message ID.
-/// Returns None if no message with this ID has been serialized yet.
-pub fn get_type_name_by_id(msg_id: u16) -> Option<String> {
-    let id_map = ID_TO_NAME.lock().unwrap();
-    if let Some(map) = id_map.as_ref() {
-        map.get(&msg_id).cloned()
-    } else {
-        None
-    }
-}
-
-/// Register a message ID to type name mapping directly.
-/// This is useful when you want to register the mapping at startup.
-pub fn register_message_id(msg_id: u16, type_name: &str) {
-    let mut id_map = ID_TO_NAME.lock().unwrap();
-    let map = id_map.get_or_insert_with(HashMap::new);
-    map.insert(msg_id, type_name.to_string());
-}
-
-/// Macro to define a remote-capable message.
-///
-/// This extends `define_message!` by also deriving Serialize/Deserialize.
-/// You still need to call `register_remote_message::<Type>("Type")` at runtime.
-///
-/// # Example
-/// ```rust
-/// use actors::define_remote_message;
-///
-/// define_remote_message!(Ping, 100, { count: i32 });
-/// ```
-#[macro_export]
-macro_rules! define_remote_message {
-    ($name:ident, $id:expr, { $($field:ident : $ty:ty),* $(,)? }) => {
-        #[derive(serde::Serialize, serde::Deserialize)]
-        pub struct $name {
-            $(pub $field: $ty),*
-        }
-
-        impl $crate::Message for $name {
-            fn message_id(&self) -> u16 {
-                $id
-            }
-            fn as_any(&self) -> &dyn std::any::Any {
-                self
-            }
-            fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-                self
-            }
-        }
-    };
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::define_message;
     use serde::{Deserialize, Serialize};
 
-    #[derive(Serialize, Deserialize, Debug, PartialEq)]
+    #[derive(Serialize, Deserialize, Debug, PartialEq, Default)]
     struct TestMsg {
         value: i32,
         name: String,
     }
-    define_message!(TestMsg, 999);
+    define_message!(TestMsg);
 
     #[test]
     fn test_register_and_serialize() {
@@ -241,5 +199,17 @@ mod tests {
         let typed = msg.as_any().downcast_ref::<TestMsg>().unwrap();
         assert_eq!(typed.value, 123);
         assert_eq!(typed.name, "hello");
+    }
+
+    #[test]
+    fn test_get_type_name() {
+        register_remote_message::<TestMsg>("TestMsg");
+
+        let msg = TestMsg {
+            value: 1,
+            name: "x".to_string(),
+        };
+
+        assert_eq!(get_type_name(&msg), Some("TestMsg".to_string()));
     }
 }

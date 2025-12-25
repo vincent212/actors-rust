@@ -13,14 +13,13 @@ http://m2te.ch/
 
 //! Message types and traits for the actor framework.
 //!
-//! All messages must implement the `Message` trait. Use the `message!` macro
+//! All messages must implement the `Message` trait. Use the `define_message!` macro
 //! for easy implementation.
 
 use std::any::Any;
 
 /// Trait for all messages in the actor system.
 ///
-/// Each message type must have a unique ID (0-511 for optimal dispatch performance).
 /// Messages must be Send + 'static to be passed between threads.
 ///
 /// # Example
@@ -28,15 +27,12 @@ use std::any::Any;
 /// use actors::define_message;
 ///
 /// struct Ping { count: i32 }
-/// define_message!(Ping, 100);
+/// define_message!(Ping);
 ///
 /// struct Pong { count: i32 }
-/// define_message!(Pong, 101);
+/// define_message!(Pong);
 /// ```
 pub trait Message: Any + Send + 'static {
-    /// Returns the unique message ID at runtime (0-511 recommended for fast dispatch)
-    fn message_id(&self) -> u16;
-
     /// For downcasting to concrete type
     fn as_any(&self) -> &dyn Any;
 
@@ -53,16 +49,12 @@ pub trait Message: Any + Send + 'static {
 /// struct MyMessage {
 ///     data: String,
 /// }
-/// define_message!(MyMessage, 42);
+/// define_message!(MyMessage);
 /// ```
 #[macro_export]
 macro_rules! define_message {
-    ($name:ty, $id:expr) => {
+    ($name:ty) => {
         impl $crate::Message for $name {
-            fn message_id(&self) -> u16 {
-                $id
-            }
-
             fn as_any(&self) -> &dyn std::any::Any {
                 self
             }
@@ -84,13 +76,7 @@ mod tests {
     struct TestMessage {
         value: i32,
     }
-    define_message!(TestMessage, 1);
-
-    #[test]
-    fn test_message_id() {
-        let msg = TestMessage { value: 42 };
-        assert_eq!(msg.message_id(), 1);
-    }
+    define_message!(TestMessage);
 
     #[test]
     fn test_downcast() {

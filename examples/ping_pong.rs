@@ -27,12 +27,12 @@ use actors::{define_message, handle_messages, ActorContext, ActorRef, Manager, M
 struct Ping {
     count: i32,
 }
-define_message!(Ping, 100);
+define_message!(Ping);
 
 struct Pong {
     count: i32,
 }
-define_message!(Pong, 101);
+define_message!(Pong);
 
 // Actor that receives Pong and sends Ping
 struct PingActor {

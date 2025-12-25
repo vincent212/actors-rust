@@ -20,7 +20,7 @@ use actors::{
 
 // Custom message to trigger a one-shot timer
 struct StartCountdown;
-define_message!(StartCountdown, 100);
+define_message!(StartCountdown);
 
 /// An actor that demonstrates both periodic and one-shot timers.
 struct TimerActor {

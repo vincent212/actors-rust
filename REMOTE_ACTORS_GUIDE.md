@@ -193,13 +193,13 @@ use actors::{Message, define_message};
 struct Ping {
     count: i32,
 }
-define_message!(Ping, 100);
+define_message!(Ping);
 
 #[derive(Serialize, Deserialize)]
 struct Pong {
     count: i32,
 }
-define_message!(Pong, 101);
+define_message!(Pong);
 ```
 
 ### 2. Register Messages
@@ -284,22 +284,20 @@ use serde::{Deserialize, Serialize};
 use actors::{
     ActorContext, Manager, ThreadConfig,
     ZmqReceiver, ZmqSender, register_remote_message,
-    register_message_id, define_message, handle_messages,
+    define_message, handle_messages,
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 struct Ping { count: i32 }
-define_message!(Ping, 100);
+define_message!(Ping);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 struct Pong { count: i32 }
-define_message!(Pong, 101);
+define_message!(Pong);
 
 fn register_messages() {
     register_remote_message::<Ping>("Ping");
     register_remote_message::<Pong>("Pong");
-    register_message_id(100, "Ping");
-    register_message_id(101, "Pong");
 }
 
 struct PongActor;
@@ -369,22 +367,20 @@ use serde::{Deserialize, Serialize};
 use actors::{
     ActorContext, ActorRef, Manager, ManagerHandle,
     Start, ThreadConfig, ZmqReceiver, ZmqSender,
-    register_remote_message, register_message_id, define_message, handle_messages,
+    register_remote_message, define_message, handle_messages,
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 struct Ping { count: i32 }
-define_message!(Ping, 100);
+define_message!(Ping);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 struct Pong { count: i32 }
-define_message!(Pong, 101);
+define_message!(Pong);
 
 fn register_messages() {
     register_remote_message::<Ping>("Ping");
     register_remote_message::<Pong>("Pong");
-    register_message_id(100, "Ping");
-    register_message_id(101, "Pong");
 }
 
 struct PingActor {
@@ -518,7 +514,6 @@ Example of matching registration:
 | Rust | Python |
 |------|--------|
 | `register_remote_message::<Ping>("Ping")` | `@register_message class Ping:` |
-| `register_message_id(100, "Ping")` | (automatic from class name) |
 
 ### Field Naming
 
@@ -603,10 +598,9 @@ class Ping:
 
 ### Rust: Serialization panic
 
-Ensure both registrations are done:
+Ensure message registration is done:
 ```rust
-register_remote_message::<Ping>("Ping");  // For deserialization
-register_message_id(100, "Ping");          // For serialization
+register_remote_message::<Ping>("Ping");
 ```
 
 ### Connection timing
@@ -669,11 +663,8 @@ impl RemoteActorRef {
 ### Message Registration
 
 ```rust
-/// Register message type for deserialization
+/// Register message type for remote serialization/deserialization
 pub fn register_remote_message<M: Message + Serialize + DeserializeOwned>(type_name: &str);
-
-/// Register message ID for serialization
-pub fn register_message_id(msg_id: u16, type_name: &str);
 ```
 
 ## Error Handling with Reject Messages
@@ -697,7 +688,7 @@ To receive reject notifications, register the `Reject` message and add a handler
 
 ```rust
 use actors::{
-    Reject, register_remote_message, register_message_id, handle_messages,
+    Reject, register_remote_message, handle_messages,
 };
 
 fn register_messages() {
@@ -705,7 +696,6 @@ fn register_messages() {
 
     // Register Reject for remote communication
     register_remote_message::<Reject>("Reject");
-    register_message_id(4, "Reject");  // Reject has message ID 4
 }
 
 struct MyActor {

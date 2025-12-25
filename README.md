@@ -16,14 +16,13 @@ A lightweight, high-performance actor framework for building concurrent systems 
 ### 1. Define Messages
 
 ```rust
-use actors::{Message, message};
+use actors::{Message, define_message};
 
-// Each message type has a unique ID (0-511 for optimal performance)
 struct Ping { count: i32 }
-message!(Ping, 100);
+define_message!(Ping);
 
 struct Pong { count: i32 }
-message!(Pong, 101);
+define_message!(Pong);
 ```
 
 ### 2. Create Actors

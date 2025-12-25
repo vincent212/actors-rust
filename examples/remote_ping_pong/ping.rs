@@ -27,13 +27,13 @@ use actors::{
 struct Ping {
     count: i32,
 }
-define_message!(Ping, 100);
+define_message!(Ping);
 
 #[derive(Serialize, Deserialize, Default)]
 struct Pong {
     count: i32,
 }
-define_message!(Pong, 101);
+define_message!(Pong);
 
 /// PingActor sends Ping to remote pong, receives Pong back.
 struct PingActor {

@@ -31,10 +31,10 @@ http://m2te.ch/
 //! use actors::{Message, define_message};
 //!
 //! struct Ping { count: i32 }
-//! define_message!(Ping, 100);
+//! define_message!(Ping);
 //!
 //! struct Pong { count: i32 }
-//! define_message!(Pong, 101);
+//! define_message!(Pong);
 //! ```
 //!
 //! ### 2. Create Actors
@@ -108,7 +108,7 @@ pub use message::Message;
 pub use messages::{Continue, Reject, Shutdown, Start, Timeout};
 pub use remote::{ActorRegistry, RemoteActorRef, ZmqReceiver, ZmqReceiverHandle, ZmqSender};
 pub use serialization::{
-    deserialize_message, get_type_name_by_id, register_message_id, register_remote_message,
+    deserialize_message, get_type_name, register_remote_message,
     serialize_message,
 };
 pub use timer::{next_timer_id, Timer};

@@ -30,7 +30,7 @@ use zeromq::{PullSocket, PushSocket, Socket, SocketRecv, SocketSend};
 
 use crate::actor::ActorRef;
 use crate::messages::Reject;
-use crate::serialization::{serialize_message, try_deserialize_message};
+use crate::serialization::{get_type_name, serialize_message, try_deserialize_message};
 use crate::Message;
 
 /// Internal request for async remote sends.
@@ -216,13 +216,11 @@ impl ZmqSender {
 }
 
 /// Get the message type name for serialization.
-/// This requires the message to be registered with register_message_id.
+/// This requires the message to be registered with register_remote_message.
 fn get_message_type_name(msg: &dyn Message) -> String {
-    // Look up the registered type name by message ID
-    crate::serialization::get_type_name_by_id(msg.message_id())
+    get_type_name(msg)
         .unwrap_or_else(|| {
-            // Fallback to Message_ID format if not registered
-            format!("Message_{}", msg.message_id())
+            panic!("Message type not registered for remote serialization. Call register_remote_message::<YourType>(\"YourType\") first.")
         })
 }
 

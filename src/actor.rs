@@ -262,10 +262,10 @@ pub trait Actor: Send + 'static {
 /// use actors::{Actor, ActorContext, Message, define_message, handle_messages};
 ///
 /// struct Ping { count: i32 }
-/// define_message!(Ping, 100);
+/// define_message!(Ping);
 ///
 /// struct Pong { count: i32 }
-/// define_message!(Pong, 101);
+/// define_message!(Pong);
 ///
 /// struct MyActor {
 ///     other_actor: ActorRef,
@@ -390,7 +390,7 @@ mod tests {
     struct TestMessage {
         value: i32,
     }
-    define_message!(TestMessage, 10);
+    define_message!(TestMessage);
 
     struct TestActor {
         received: i32,

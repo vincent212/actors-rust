@@ -26,14 +26,14 @@ use crate::define_message;
 /// messaging other actors (which isn't possible in `init()`).
 #[derive(Debug, Clone)]
 pub struct Start;
-define_message!(Start, 0);
+define_message!(Start);
 
 /// Sent to actors when the Manager shuts down.
 ///
 /// Actors should clean up resources and stop processing when they receive this.
 #[derive(Debug, Clone)]
 pub struct Shutdown;
-define_message!(Shutdown, 1);
+define_message!(Shutdown);
 
 /// Sent by the Timer when a timeout expires.
 ///
@@ -43,7 +43,7 @@ pub struct Timeout {
     /// User-defined timer identifier
     pub id: u64,
 }
-define_message!(Timeout, 2);
+define_message!(Timeout);
 
 impl Timeout {
     pub fn new(id: u64) -> Self {
@@ -60,7 +60,7 @@ pub struct Continue {
     /// User-defined continuation state
     pub state: u64,
 }
-define_message!(Continue, 3);
+define_message!(Continue);
 
 impl Continue {
     pub fn new(state: u64) -> Self {
@@ -83,7 +83,7 @@ pub struct Reject {
     /// The name of the actor that rejected the message
     pub rejected_by: String,
 }
-define_message!(Reject, 4);
+define_message!(Reject);
 
 impl Reject {
     pub fn new(message_type: &str, reason: &str, rejected_by: &str) -> Self {
@@ -98,16 +98,6 @@ impl Reject {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Message;
-
-    #[test]
-    fn test_builtin_message_ids() {
-        assert_eq!(Start.message_id(), 0);
-        assert_eq!(Shutdown.message_id(), 1);
-        assert_eq!(Timeout::new(0).message_id(), 2);
-        assert_eq!(Continue::new(0).message_id(), 3);
-        assert_eq!(Reject::new("Test", "reason", "actor").message_id(), 4);
-    }
 
     #[test]
     fn test_timeout_new() {

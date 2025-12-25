@@ -27,7 +27,7 @@ use std::sync::Arc;
 struct ComputeMessage {
     input: i32,
 }
-define_message!(ComputeMessage, 200);
+define_message!(ComputeMessage);
 
 // Message with the computation result
 struct ResultMessage {
@@ -35,7 +35,7 @@ struct ResultMessage {
     input: i32,
     output: i32,
 }
-define_message!(ResultMessage, 201);
+define_message!(ResultMessage);
 
 // A lightweight worker actor that performs computations
 struct WorkerActor {
