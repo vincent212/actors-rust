@@ -61,20 +61,22 @@ static ID_TO_NAME: Mutex<Option<HashMap<u16, String>>> = Mutex::new(None);
 /// ```
 pub fn register_remote_message<M>(type_name: &str)
 where
-    M: Message + Serialize + DeserializeOwned + 'static,
+    M: Message + Serialize + DeserializeOwned + Default + 'static,
 {
-    let type_name_clone = type_name.to_string();
+    // Get the message ID by creating a default instance
+    let msg_id = M::default().message_id();
+
+    // Register ID -> name mapping upfront
+    {
+        let mut id_map = ID_TO_NAME.lock().unwrap();
+        let map = id_map.get_or_insert_with(HashMap::new);
+        map.insert(msg_id, type_name.to_string());
+    }
 
     let mut reg = REGISTRY.lock().unwrap();
     let map = reg.get_or_insert_with(HashMap::new);
 
     let serialize: SerializeFn = Box::new(move |msg: &dyn Message| {
-        // Register the ID->name mapping on first serialize
-        {
-            let mut id_map = ID_TO_NAME.lock().unwrap();
-            let map = id_map.get_or_insert_with(HashMap::new);
-            map.entry(msg.message_id()).or_insert_with(|| type_name_clone.clone());
-        }
         let typed = msg.as_any().downcast_ref::<M>().expect("Type mismatch in serialize");
         serde_json::to_value(typed).expect("Failed to serialize message")
     });

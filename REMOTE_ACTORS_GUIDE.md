@@ -204,19 +204,15 @@ define_message!(Pong, 101);
 
 ### 2. Register Messages
 
-Messages must be registered for serialization. For Python interop, the type name must match exactly:
+Messages must be registered for serialization. **Always use class names** (like `"Ping"`, `"Pong"`) - this ensures interoperability with Python and C++:
 
 ```rust
-use actors::{register_remote_message, register_message_id};
+use actors::register_remote_message;
 
 fn register_messages() {
-    // Register for deserialization (type name -> deserializer)
+    // Register with class names (NOT "Message_100" - use actual class names!)
     register_remote_message::<Ping>("Ping");
     register_remote_message::<Pong>("Pong");
-
-    // Register for serialization (message ID -> type name)
-    register_message_id(100, "Ping");
-    register_message_id(101, "Pong");
 }
 ```
 
@@ -229,6 +225,7 @@ use std::sync::Arc;
 use actors::{ZmqSender, ZmqReceiver};
 
 // Create sender (used for outgoing messages and reply routing)
+// ZmqSender runs on its own thread - sends never block the caller
 let zmq_sender = Arc::new(ZmqSender::new("tcp://localhost:5001"));
 
 // Create receiver (binds to listen for incoming messages)
@@ -625,19 +622,20 @@ mgr.init();
 
 ### ZmqSender
 
+`ZmqSender` runs on its own dedicated thread. Sends are async and never block the caller - messages are serialized on the caller's thread and queued to the sender thread for ZMQ transmission.
+
 ```rust
 impl ZmqSender {
-    /// Create a new sender with local endpoint for reply routing
+    /// Create a new sender with local endpoint for reply routing.
+    /// Spawns a dedicated sender thread for async sending.
     pub fn new(local_endpoint: &str) -> Self;
 
     /// Create a remote actor reference
     pub fn remote_ref(&self, name: &str, endpoint: &str) -> RemoteActorRef;
 
-    /// Send message directly to endpoint/actor
+    /// Send message to endpoint/actor (async - returns immediately)
+    /// Message is serialized on caller's thread, then queued to sender thread.
     pub fn send_to(&self, endpoint: &str, actor: &str, msg: Box<dyn Message>, sender: Option<ActorRef>);
-
-    /// Close all sockets
-    pub fn close(&self);
 }
 ```
 

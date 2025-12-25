@@ -74,7 +74,7 @@ impl Continue {
 /// - The message type is not registered
 /// - The target actor is not found
 /// - Deserialization fails
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct Reject {
     /// The name of the message type that was rejected
     pub message_type: String,

@@ -21,6 +21,7 @@ http://m2te.ch/
 //! Uses the `zeromq` crate (pure Rust) for wire-compatible ZMQ messaging.
 
 use std::collections::HashMap;
+use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -31,6 +32,13 @@ use crate::actor::ActorRef;
 use crate::messages::Reject;
 use crate::serialization::{serialize_message, try_deserialize_message};
 use crate::Message;
+
+/// Internal request for async remote sends.
+/// Sent to the dedicated sender thread.
+struct SendRequest {
+    endpoint: String,
+    data: Vec<u8>,
+}
 
 /// Reference to an actor in a remote process.
 ///
@@ -81,23 +89,57 @@ impl RemoteActorRef {
 /// Sends messages to remote processes via ZMQ PUSH sockets.
 ///
 /// Manages a pool of PUSH sockets, one per remote endpoint.
-/// Uses tokio runtime internally to bridge async ZMQ to sync API.
+/// Runs on its own thread so sending never blocks the caller.
+///
+/// Usage:
+///   let zmq_sender = Arc::new(ZmqSender::new("tcp://localhost:5002"));
+///   // Sends are now async - returns immediately
+///   zmq_sender.send_to("tcp://localhost:5001", "pong", msg, sender);
 pub struct ZmqSender {
-    runtime: Runtime,
-    sockets: Mutex<HashMap<String, PushSocket>>,
+    send_tx: Sender<SendRequest>,
     local_endpoint: String,
 }
 
 impl ZmqSender {
     /// Create a new ZmqSender.
     ///
+    /// Spawns a dedicated sender thread that handles all ZMQ sends asynchronously.
+    ///
     /// # Arguments
     /// * `local_endpoint` - This process's endpoint for reply routing
     pub fn new(local_endpoint: &str) -> Self {
-        let runtime = Runtime::new().expect("Failed to create tokio runtime");
+        let (send_tx, send_rx) = channel::<SendRequest>();
+
+        // Spawn dedicated sender thread
+        thread::spawn(move || {
+            let rt = Runtime::new().expect("Failed to create sender runtime");
+            let mut sockets: HashMap<String, PushSocket> = HashMap::new();
+
+            rt.block_on(async {
+                while let Ok(req) = send_rx.recv() {
+                    // Get or create socket for this endpoint
+                    let needs_connect = !sockets.contains_key(&req.endpoint);
+
+                    if needs_connect {
+                        let mut socket = PushSocket::new();
+                        let connect_endpoint = req.endpoint.replace("tcp://*:", "tcp://localhost:");
+                        if socket.connect(&connect_endpoint).await.is_ok() {
+                            // Small delay to let connection establish
+                            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                            sockets.insert(req.endpoint.clone(), socket);
+                        }
+                    }
+
+                    // Send the message
+                    if let Some(socket) = sockets.get_mut(&req.endpoint) {
+                        let _ = socket.send(req.data.into()).await;
+                    }
+                }
+            });
+        });
+
         ZmqSender {
-            runtime,
-            sockets: Mutex::new(HashMap::new()),
+            send_tx,
             local_endpoint: local_endpoint.to_string(),
         }
     }
@@ -112,7 +154,10 @@ impl ZmqSender {
         RemoteActorRef::new(name, endpoint, Arc::clone(self))
     }
 
-    /// Send a message to a remote actor.
+    /// Send a message to a remote actor (async - returns immediately).
+    ///
+    /// The message is serialized on the caller's thread, then queued
+    /// to the dedicated sender thread for actual ZMQ transmission.
     ///
     /// # Arguments
     /// * `endpoint` - Remote process's ZMQ endpoint
@@ -145,19 +190,19 @@ impl ZmqSender {
             "message": msg_json
         });
 
-        let endpoint = endpoint.to_string();
         let data_bytes = data.to_string().into_bytes();
 
-        // Use block_on to send synchronously
-        self.runtime.block_on(async {
-            self.send_raw_async(&endpoint, data_bytes).await;
+        // Queue to sender thread (non-blocking!)
+        let _ = self.send_tx.send(SendRequest {
+            endpoint: endpoint.to_string(),
+            data: data_bytes,
         });
     }
 
     /// Send a message to a remote actor (async version for use within tokio runtime).
     ///
     /// This is used internally by ZmqReceiver when it needs to send Reject messages
-    /// back to the sender without blocking.
+    /// back to the sender. Now just queues to the sender thread like send_to().
     pub async fn send_to_async(
         &self,
         endpoint: &str,
@@ -165,58 +210,8 @@ impl ZmqSender {
         msg: Box<dyn Message>,
         sender: Option<ActorRef>,
     ) {
-        // Get message type name (must be registered)
-        let msg_type = get_message_type_name(msg.as_ref());
-        let msg_json = serialize_message(msg.as_ref(), &msg_type);
-
-        // Determine sender info for reply routing
-        let (sender_actor, sender_endpoint) = match &sender {
-            Some(ActorRef::Local(r)) => (Some(r.name().to_string()), Some(self.local_endpoint.clone())),
-            Some(ActorRef::Remote(r)) => (Some(r.name().to_string()), Some(r.endpoint().to_string())),
-            None => (None, None),
-        };
-
-        let data = serde_json::json!({
-            "sender_actor": sender_actor,
-            "sender_endpoint": sender_endpoint,
-            "receiver": actor_name,
-            "message_type": msg_type,
-            "message": msg_json
-        });
-
-        let data_bytes = data.to_string().into_bytes();
-        self.send_raw_async(endpoint, data_bytes).await;
-    }
-
-    async fn send_raw_async(&self, endpoint: &str, data: Vec<u8>) {
-        // Check if socket exists, create if not
-        let needs_connect = {
-            let sockets = self.sockets.lock().unwrap();
-            !sockets.contains_key(endpoint)
-        };
-
-        if needs_connect {
-            let mut socket = PushSocket::new();
-            let connect_endpoint = endpoint.replace("tcp://*:", "tcp://localhost:");
-            if socket.connect(&connect_endpoint).await.is_ok() {
-                // Small delay to let connection establish
-                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-                let mut sockets = self.sockets.lock().unwrap();
-                sockets.insert(endpoint.to_string(), socket);
-            }
-        }
-
-        // Send the message
-        let mut sockets = self.sockets.lock().unwrap();
-        if let Some(socket) = sockets.get_mut(endpoint) {
-            let _ = socket.send(data.into()).await;
-        }
-    }
-
-    /// Close all sockets
-    pub fn close(&self) {
-        let mut sockets = self.sockets.lock().unwrap();
-        sockets.clear();
+        // Just delegate to send_to - it's already non-blocking
+        self.send_to(endpoint, actor_name, msg, sender);
     }
 }
 

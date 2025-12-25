@@ -21,17 +21,16 @@ use serde::{Deserialize, Serialize};
 use actors::{
     ActorContext, Manager, Reject, ThreadConfig,
     ZmqReceiver, ZmqSender, register_remote_message, define_message, handle_messages,
-    register_message_id,
 };
 
 // Receiver only knows about Ping/Pong - NOT UnknownMessage
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 struct Ping {
     count: i32,
 }
 define_message!(Ping, 100);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 struct Pong {
     count: i32,
 }
@@ -40,13 +39,10 @@ define_message!(Pong, 101);
 fn register_messages() {
     // Only register messages we know about
     // Note: UnknownMessage is NOT registered here!
+    // ID->name mapping is now done automatically
     register_remote_message::<Ping>("Ping");
     register_remote_message::<Pong>("Pong");
     register_remote_message::<Reject>("Reject");
-
-    register_message_id(100, "Ping");
-    register_message_id(101, "Pong");
-    register_message_id(4, "Reject");
 }
 
 /// ReceiverActor receives Ping, sends Pong back.

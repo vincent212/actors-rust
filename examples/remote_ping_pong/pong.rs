@@ -23,13 +23,13 @@ use actors::{
 };
 
 // Define messages
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 struct Ping {
     count: i32,
 }
 define_message!(Ping, 100);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 struct Pong {
     count: i32,
 }
@@ -52,9 +52,9 @@ impl PongActor {
 fn main() {
     println!("=== Pong Process (port 5001) ===");
 
-    // Register messages for remote serialization
-    register_remote_message::<Ping>("Message_100");
-    register_remote_message::<Pong>("Message_101");
+    // Register messages for remote serialization (use class names for interop)
+    register_remote_message::<Ping>("Ping");
+    register_remote_message::<Pong>("Pong");
 
     let endpoint = "tcp://0.0.0.0:5001";
 

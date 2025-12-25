@@ -23,13 +23,13 @@ use actors::{
 };
 
 // Define messages - must match Python message registration
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 struct Ping {
     count: i32,
 }
 define_message!(Ping, 100);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 struct Pong {
     count: i32,
 }
@@ -37,11 +37,9 @@ define_message!(Pong, 101);
 
 fn register_messages() {
     // Register messages with their type names (must match Python)
+    // This also registers the ID->name mapping automatically
     register_remote_message::<Ping>("Ping");
     register_remote_message::<Pong>("Pong");
-    // Also register ID->name mapping for serialization
-    actors::register_message_id(100, "Ping");
-    actors::register_message_id(101, "Pong");
 }
 
 /// PingActor sends Ping to Python pong, receives Pong back.
