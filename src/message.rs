@@ -38,6 +38,12 @@ pub trait Message: Any + Send + 'static {
 
     /// For downcasting to concrete type (mutable)
     fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    /// Get the message ID (for FFI dispatch)
+    /// Returns 0 for non-interop messages (default)
+    fn message_id(&self) -> i32 {
+        0
+    }
 }
 
 /// Macro to implement the Message trait for a type.

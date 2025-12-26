@@ -179,6 +179,7 @@ impl ZmqSender {
         let (sender_actor, sender_endpoint) = match &sender {
             Some(ActorRef::Local(r)) => (Some(r.name().to_string()), Some(self.local_endpoint.clone())),
             Some(ActorRef::Remote(r)) => (Some(r.name().to_string()), Some(r.endpoint().to_string())),
+            Some(ActorRef::Cpp(r)) => (Some(r.name().to_string()), None),  // Cpp actors don't have endpoints
             None => (None, None),
         };
 

@@ -21,12 +21,35 @@ http://m2te.ch/
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 
 use crate::actor::{ActorRef, ActorRuntime};
 use crate::messages::{Shutdown, Start};
 use crate::Actor;
+
+/// Type for the C++ actor lookup function
+/// Returns Some(ActorRef) if the actor exists in C++, None otherwise
+pub type CppActorLookupFn = fn(&str, &str) -> Option<ActorRef>;
+
+/// Global C++ actor lookup function (set by actors-interop)
+static CPP_LOOKUP: RwLock<Option<CppActorLookupFn>> = RwLock::new(None);
+
+/// Register a C++ actor lookup function.
+///
+/// This is called by actors-interop to enable cross-language actor lookup.
+pub fn register_cpp_lookup(lookup_fn: CppActorLookupFn) {
+    *CPP_LOOKUP.write().unwrap() = Some(lookup_fn);
+}
+
+/// Check if an actor exists in C++.
+fn lookup_cpp_actor(name: &str, sender: &str) -> Option<ActorRef> {
+    if let Some(lookup_fn) = *CPP_LOOKUP.read().unwrap() {
+        lookup_fn(name, sender)
+    } else {
+        None
+    }
+}
 
 /// Configuration for an actor's thread
 #[derive(Clone)]
@@ -183,9 +206,29 @@ impl Manager {
 
     /// Get an ActorRef by name.
     ///
-    /// Returns None if no actor with that name is registered.
+    /// Checks local Rust actors first, then C++ actors if a lookup function is registered.
+    /// Returns None if no actor with that name is registered in either.
     pub fn get_ref(&self, name: &str) -> Option<ActorRef> {
-        self.expanded_registry.get(name).cloned()
+        // Check local Rust actors first
+        if let Some(actor_ref) = self.expanded_registry.get(name) {
+            return Some(actor_ref.clone());
+        }
+
+        // Check C++ actors (if lookup function registered)
+        lookup_cpp_actor(name, "")
+    }
+
+    /// Get an ActorRef by name with a sender name for C++ actors.
+    ///
+    /// Use this when you need to specify the sender for cross-language messaging.
+    pub fn get_ref_with_sender(&self, name: &str, sender: &str) -> Option<ActorRef> {
+        // Check local Rust actors first
+        if let Some(actor_ref) = self.expanded_registry.get(name) {
+            return Some(actor_ref.clone());
+        }
+
+        // Check C++ actors (if lookup function registered)
+        lookup_cpp_actor(name, sender)
     }
 
     /// Get all registered actor names.

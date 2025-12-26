@@ -101,9 +101,9 @@ pub mod serialization;
 pub mod timer;
 
 // Re-export commonly used types
-pub use actor::{Actor, ActorContext, ActorRef, ActorRuntime, Envelope, LocalActorRef};
+pub use actor::{Actor, ActorContext, ActorRef, ActorRuntime, CppActorRef, CppSendFn, Envelope, LocalActorRef};
 pub use group::Group;
-pub use manager::{Manager, ManagerHandle, ThreadConfig};
+pub use manager::{register_cpp_lookup, CppActorLookupFn, Manager, ManagerHandle, ThreadConfig};
 pub use message::Message;
 pub use messages::{Continue, Reject, Shutdown, Start, Timeout};
 pub use remote::{ActorRegistry, RemoteActorRef, ZmqReceiver, ZmqReceiverHandle, ZmqSender};

@@ -101,9 +101,59 @@ impl LocalActorRef {
     }
 }
 
-/// Reference to an actor (local or remote).
+/// Type for the FFI send function that dispatches messages to C++ actors.
 ///
-/// ActorRef is an enum that can hold either a local or remote actor reference.
+/// The send function takes:
+/// - target: target actor name
+/// - sender: sender actor name
+/// - msg: the boxed message trait object
+///
+/// The implementation (provided by actors-interop) extracts message_id(),
+/// converts to C struct, and calls the FFI function internally.
+pub type CppSendFn = fn(&str, &str, &dyn crate::Message) -> i32;
+
+/// Reference to a C++ actor via FFI.
+///
+/// CppActorRef is location-transparent - actors just call send() like any other ActorRef.
+/// The FFI dispatch happens internally via the send_fn provided by actors-interop.
+#[derive(Clone)]
+pub struct CppActorRef {
+    target_name: String,
+    sender_name: String,
+    /// Function pointer for sending messages via FFI
+    /// This function handles message_id extraction and C struct conversion internally
+    send_fn: CppSendFn,
+}
+
+impl CppActorRef {
+    /// Create a new CppActorRef with a send function
+    pub fn new(target: &str, sender: &str, send_fn: CppSendFn) -> Self {
+        CppActorRef {
+            target_name: target.to_string(),
+            sender_name: sender.to_string(),
+            send_fn,
+        }
+    }
+
+    /// Get the target actor's name
+    pub fn name(&self) -> &str {
+        &self.target_name
+    }
+
+    /// Get the sender's name
+    pub fn sender_name(&self) -> &str {
+        &self.sender_name
+    }
+
+    /// Send a message to the C++ actor (called internally by ActorRef::send)
+    pub(crate) fn send_message(&self, msg: &dyn crate::Message) -> i32 {
+        (self.send_fn)(&self.target_name, &self.sender_name, msg)
+    }
+}
+
+/// Reference to an actor (local, remote, or C++ via FFI).
+///
+/// ActorRef is an enum that can hold either a local, remote, or C++ actor reference.
 /// This provides polymorphism without trait objects.
 #[derive(Clone)]
 pub enum ActorRef {
@@ -111,6 +161,8 @@ pub enum ActorRef {
     Local(LocalActorRef),
     /// Remote actor - uses ZMQ
     Remote(crate::remote::RemoteActorRef),
+    /// C++ actor - uses FFI
+    Cpp(CppActorRef),
 }
 
 impl ActorRef {
@@ -124,16 +176,22 @@ impl ActorRef {
         match self {
             ActorRef::Local(r) => r.name(),
             ActorRef::Remote(r) => r.name(),
+            ActorRef::Cpp(r) => r.name(),
         }
     }
 
     /// Send a message to this actor (async, fire-and-forget)
     ///
     /// The message is queued and processed later by the receiver's thread.
+    /// For Cpp actors, the message is dispatched via FFI transparently.
     pub fn send(&self, msg: Box<dyn Message>, sender: Option<ActorRef>) {
         match self {
             ActorRef::Local(r) => r.send(msg, sender),
             ActorRef::Remote(r) => r.send(msg, sender),
+            ActorRef::Cpp(r) => {
+                // Dispatch via FFI - the send_fn handles message_id extraction and C struct conversion
+                r.send_message(msg.as_ref());
+            }
         }
     }
 
@@ -142,11 +200,18 @@ impl ActorRef {
     /// The handler runs in the receiver's thread, but the caller blocks
     /// until a reply is received.
     ///
-    /// Note: This only works for local actors. Remote actors will return None.
+    /// Note: fast_send is only fully supported for local actors.
+    /// For Cpp actors, the message is sent but no reply is returned (fire-and-forget behavior).
     pub fn fast_send(&self, msg: Box<dyn Message>, sender: Option<ActorRef>) -> Option<Box<dyn Message>> {
         match self {
             ActorRef::Local(r) => r.fast_send(msg, sender),
             ActorRef::Remote(_) => None, // fast_send not supported for remote
+            ActorRef::Cpp(r) => {
+                // For Cpp, we send but cannot receive a reply via FFI
+                // This behaves like send() - fire-and-forget
+                r.send_message(msg.as_ref());
+                None
+            }
         }
     }
 
@@ -160,12 +225,23 @@ impl ActorRef {
         matches!(self, ActorRef::Remote(_))
     }
 
+    /// Check if this is a C++ actor reference
+    pub fn is_cpp(&self) -> bool {
+        matches!(self, ActorRef::Cpp(_))
+    }
+
     /// Get the endpoint if this is a remote actor ref
     pub fn endpoint(&self) -> Option<&str> {
         match self {
             ActorRef::Local(_) => None,
             ActorRef::Remote(r) => Some(r.endpoint()),
+            ActorRef::Cpp(_) => None,
         }
+    }
+
+    /// Create a new C++ actor reference (used internally by actors-interop)
+    pub fn cpp(target: &str, sender: &str, send_fn: CppSendFn) -> Self {
+        ActorRef::Cpp(CppActorRef::new(target, sender, send_fn))
     }
 }
 
